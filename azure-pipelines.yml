@@ -28,11 +28,12 @@ stages:
       displayName: 'Copy code to backend server'
 
     - script: |
-        echo "Installing Python dependencies..."
+        echo "Installing Python dependencies (incl. dotenv)..."
         ssh -i $(SSH_KEY_PATH) -o StrictHostKeyChecking=no azureuser@$(BACKEND_HOST) << EOF
           cd $(APP_PATH)
           source venv/bin/activate
           pip install -r requirements.txt
+          pip install python-dotenv
         EOF
       displayName: 'Install Python dependencies'
 
