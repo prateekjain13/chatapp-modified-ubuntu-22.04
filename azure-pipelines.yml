@@ -4,45 +4,64 @@ trigger:
 pool:
   name: SelfHostedBackend  # your self-hosted agent pool name
 
+
 variables:
-  VM_USER: 'azureuser'
-  VM_IP: '20.115.90.142'
-  SSH_KEY_PATH: '/home/azureuser/.ssh/backend_key.pem'
-  APP_DIR: '/chatapp'
+  SSH_KEY_PATH: '/home/azureuser/.ssh/backend_key.pem'  # Path to your private SSH key on build agent
+  BACKEND_HOST: '20.115.90.142'                         # Your VM public IP
+  APP_PATH: '/chatapp'                                  # Backend app path on VM
+  SERVICE_NAME: 'chatappdaemon.service'                 # Systemd service name
 
 stages:
 - stage: Deploy
-  displayName: '🚀 Deploy to Backend VM'
   jobs:
-  - job: PushAndDeploy
-    displayName: 'Copy, Install & Migrate'
+  - job: DeployJob
+    pool:
+      vmImage: 'ubuntu-latest'
+
     steps:
 
+    - checkout: self
+      clean: true
+
     - script: |
-        echo "Copying application files to backend..."
-        rsync -avz -e "ssh -i $(SSH_KEY_PATH) -o StrictHostKeyChecking=no" $(Build.SourcesDirectory)/ $(VM_USER)@$(VM_IP):$(APP_DIR)
-      displayName: 'Copy application files to backend'
+        echo "Copying code to backend server..."
+        scp -i $(SSH_KEY_PATH) -o StrictHostKeyChecking=no -r * azureuser@$(BACKEND_HOST):$(APP_PATH)/
+      displayName: 'Copy code to backend server'
 
     - script: |
         echo "Installing Python dependencies..."
-        ssh -i $(SSH_KEY_PATH) -o StrictHostKeyChecking=no $(VM_USER)@$(VM_IP) "
-          cd $(APP_DIR) && \
-          source venv/bin/activate && \
+        ssh -i $(SSH_KEY_PATH) -o StrictHostKeyChecking=no azureuser@$(BACKEND_HOST) << EOF
+          cd $(APP_PATH)
+          source venv/bin/activate
           pip install -r requirements.txt
-        "
+        EOF
       displayName: 'Install Python dependencies'
 
     - script: |
-        echo "Running Django makemigrations & migrate..."
-        ssh -i $(SSH_KEY_PATH) -o StrictHostKeyChecking=no $(VM_USER)@$(VM_IP) "
-          cd $(APP_DIR)/fundoo && \
-          source ../venv/bin/activate && \
-          python3 manage.py makemigrations && \
-          python3 manage.py migrate
-        "
-      displayName: 'Run Django makemigrations & migrate'
+        echo "Running makemigrations..."
+        ssh -i $(SSH_KEY_PATH) -o StrictHostKeyChecking=no azureuser@$(BACKEND_HOST) << EOF
+          cd $(APP_PATH)
+          source venv/bin/activate
+          cd fundoo
+          python3 manage.py makemigrations
+        EOF
+      displayName: 'Run makemigrations'
 
     - script: |
-        echo "Restarting chatappdaemon.service..."
-        ssh -i $(SSH_KEY_PATH) -o StrictHostKeyChecking=no $(VM_USER)@$(VM_IP) "sudo systemctl restart chatappdaemon.service"
-      displayName: 'Restart chatappdaemon.service'
+        echo "Applying migrations..."
+        ssh -i $(SSH_KEY_PATH) -o StrictHostKeyChecking=no azureuser@$(BACKEND_HOST) << EOF
+          cd $(APP_PATH)
+          source venv/bin/activate
+          cd fundoo
+          python3 manage.py migrate
+        EOF
+      displayName: 'Apply migrations'
+
+    - script: |
+        echo "Restarting service $(SERVICE_NAME)..."
+        ssh -i $(SSH_KEY_PATH) -o StrictHostKeyChecking=no azureuser@$(BACKEND_HOST) << EOF
+          cd $(APP_PATH)
+          source venv/bin/activate
+          sudo systemctl restart $(SERVICE_NAME)
+        EOF
+      displayName: 'Restart service'
