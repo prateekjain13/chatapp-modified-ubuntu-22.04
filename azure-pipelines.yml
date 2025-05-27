@@ -1,0 +1,55 @@
+trigger:
+  - main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  APP_DIR: '/chatapp'
+  VENV_DIR: '/chatapp/venv'
+  SERVICE_NAME: 'chatappdaemon.service'
+  BACKEND_HOST: '40.0.0.5'   # replace with your VM's public IP
+  SSH_USERNAME: 'azureuser'  # replace with your actual username if different
+
+stages:
+- stage: Deploy
+  displayName: 🚀 Deploy to Backend VM
+  jobs:
+  - job: PushAndDeploy
+    displayName: Copy Code & Deploy
+    steps:
+
+    # 1. Download the SSH private key securely
+    - task: DownloadSecureFile@1
+      name: fetchKey
+      inputs:
+        secureFile: 'backend_key.pem'  # matches the name you uploaded
+
+    # 2. Set file permission (needed for SSH)
+    - script: |
+        chmod 600 $(fetchKey.secureFilePath)
+      displayName: 'Fix SSH key permissions'
+
+    # 3. Copy source code to VM using scp
+    - script: |
+        scp -i $(fetchKey.secureFilePath) -o StrictHostKeyChecking=no -r $(Build.SourcesDirectory)/* $(SSH_USERNAME)@$(BACKEND_HOST):$(APP_DIR)/
+      displayName: 'Copy code to VM via SCP'
+
+    # 4. Run commands on VM: install deps, migrate, restart
+    - script: |
+        ssh -i $(fetchKey.secureFilePath) -o StrictHostKeyChecking=no $(SSH_USERNAME)@$(BACKEND_HOST) <<EOF
+          echo "Activating virtualenv and installing dependencies..."
+          source $(VENV_DIR)/bin/activate
+          pip install -r $(APP_DIR)/requirements.txt
+
+          echo "Running Django migrations..."
+          cd $(APP_DIR)/fundoo
+          python3 manage.py makemigrations
+          python3 manage.py migrate
+
+          echo "Restarting the service..."
+          sudo systemctl restart $(SERVICE_NAME)
+
+          echo "✅ Deployment complete"
+        EOF
+      displayName: 'Run deploy steps via SSH'
