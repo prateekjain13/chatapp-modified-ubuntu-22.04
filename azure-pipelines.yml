@@ -33,7 +33,7 @@ stages:
           cd $(APP_PATH)
           source venv/bin/activate
           pip install -r requirements.txt
-          pip install python-dotenv
+          pip install python-dotenv mysqlclient
         EOF
       displayName: 'Install Python dependencies'
 
