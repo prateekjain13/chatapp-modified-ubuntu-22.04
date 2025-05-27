@@ -2,41 +2,54 @@ trigger:
   - main
 
 pool:
-  name: SelfHostedBackend
+  name: 'SelfHostedBackend'  # Use your self-hosted pool name here
 
 variables:
-  APP_DIR: '/app'
+  APP_DIR: '/chatapp'
   SERVICE_NAME: 'chatapp.service'
 
 stages:
 - stage: Deploy
-  displayName: 🚀 Deploy to Backend VM
+  displayName: '🚀 Deploy to Backend VM'
   jobs:
   - job: PushAndDeploy
-    displayName: Copy, Install & Migrate
+    displayName: 'Copy, Install & Migrate'
     steps:
-    - script: |
-        echo "Copying application files to backend..."
-        rsync -av --delete $(Build.SourcesDirectory)/ $(APP_DIR)/
+
+    # 1) Copy code to the VM
+    - task: CmdLine@2
       displayName: 'Copy application files to backend'
+      inputs:
+        script: |
+          echo "Copying application files to backend..."
+          rsync -av --delete "$(Build.SourcesDirectory)/" azureuser@your-backend-ip:${APP_DIR}/
 
-    - script: |
-        echo "Installing Python dependencies..."
-        source $(APP_DIR)/venv/bin/activate
-        pip install -r $(APP_DIR)/requirements.txt
+    # 2) Install Python deps
+    - task: SSH@0
       displayName: 'Install Python dependencies'
+      inputs:
+        sshEndpoint: 'backend_vm_ssh'  # your SSH service connection
+        runOptions: 'commands'
+        commands: |
+          source ${APP_DIR}/venv/bin/activate
+          pip install -r ${APP_DIR}/requirements.txt
 
-    - script: |
-        echo "Running Django makemigrations & migrate..."
-        source $(APP_DIR)/venv/bin/activate
-        cd $(APP_DIR)/fundoo
-        python3 manage.py makemigrations
-        python3 manage.py migrate
-      displayName: 'Run Django makemigrations & migrate'
+    # 3) Run Django makemigrations & migrate
+    - task: SSH@0
+      displayName: 'Run Django migrations'
+      inputs:
+        sshEndpoint: 'backend_vm_ssh'
+        runOptions: 'commands'
+        commands: |
+          source ${APP_DIR}/venv/bin/activate
+          cd ${APP_DIR}/fundoo
+          python3 manage.py makemigrations
+          python3 manage.py migrate
 
-    - script: |
-        echo "Restarting ${SERVICE_NAME}..."
-        sudo systemctl restart ${SERVICE_NAME}
-      displayName: 'Restart chatapp service'
-      # For sudo to work without password, make sure your backend user has passwordless sudo or configure accordingly
-
+    # 4) Restart systemd service
+    - task: SSH@0
+      displayName: 'Restart chatapp.service'
+      inputs:
+        sshEndpoint: 'backend_vm_ssh'
+        runOptions: 'commands'
+        commands: sudo systemctl restart ${SERVICE_NAME}
