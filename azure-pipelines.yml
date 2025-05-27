@@ -2,54 +2,41 @@ trigger:
   - main
 
 pool:
-  vmImage: ubuntu-latest
+  name: SelfHostedBackend
 
 variables:
-  APP_DIR: '/chatapp'
-  VENV_DIR: '/chatapp/venv'
-  SERVICE_NAME: 'chatappdaemon.service'
-  BACKEND_HOST: '40.0.0.5'   # replace with your VM's public IP
-  SSH_USERNAME: 'azureuser'  # replace with your actual username if different
+  APP_DIR: '/app'
+  SERVICE_NAME: 'chatapp.service'
 
 stages:
 - stage: Deploy
   displayName: 🚀 Deploy to Backend VM
   jobs:
   - job: PushAndDeploy
-    displayName: Copy Code & Deploy
+    displayName: Copy, Install & Migrate
     steps:
-
-    # 1. Download the SSH private key securely
-    - task: DownloadSecureFile@1
-      name: fetchKey
-      inputs:
-        secureFile: 'backend_key.pem'  # matches the name you uploaded
-
-    # 2. Set file permission (needed for SSH)
     - script: |
-        chmod 600 $(fetchKey.secureFilePath)
-      displayName: 'Fix SSH key permissions'
+        echo "Copying application files to backend..."
+        rsync -av --delete $(Build.SourcesDirectory)/ $(APP_DIR)/
+      displayName: 'Copy application files to backend'
 
-    # 3. Copy source code to VM using scp
     - script: |
-        scp -i $(fetchKey.secureFilePath) -o StrictHostKeyChecking=no -r $(Build.SourcesDirectory)/* $(SSH_USERNAME)@$(BACKEND_HOST):$(APP_DIR)/
-      displayName: 'Copy code to VM via SCP'
+        echo "Installing Python dependencies..."
+        source $(APP_DIR)/venv/bin/activate
+        pip install -r $(APP_DIR)/requirements.txt
+      displayName: 'Install Python dependencies'
 
-    # 4. Run commands on VM: install deps, migrate, restart
     - script: |
-        ssh -i $(fetchKey.secureFilePath) -o StrictHostKeyChecking=no $(SSH_USERNAME)@$(BACKEND_HOST) <<EOF
-          echo "Activating virtualenv and installing dependencies..."
-          source $(VENV_DIR)/bin/activate
-          pip install -r $(APP_DIR)/requirements.txt
+        echo "Running Django makemigrations & migrate..."
+        source $(APP_DIR)/venv/bin/activate
+        cd $(APP_DIR)/fundoo
+        python3 manage.py makemigrations
+        python3 manage.py migrate
+      displayName: 'Run Django makemigrations & migrate'
 
-          echo "Running Django migrations..."
-          cd $(APP_DIR)/fundoo
-          python3 manage.py makemigrations
-          python3 manage.py migrate
+    - script: |
+        echo "Restarting ${SERVICE_NAME}..."
+        sudo systemctl restart ${SERVICE_NAME}
+      displayName: 'Restart chatapp service'
+      # For sudo to work without password, make sure your backend user has passwordless sudo or configure accordingly
 
-          echo "Restarting the service..."
-          sudo systemctl restart $(SERVICE_NAME)
-
-          echo "✅ Deployment complete"
-        EOF
-      displayName: 'Run deploy steps via SSH'
