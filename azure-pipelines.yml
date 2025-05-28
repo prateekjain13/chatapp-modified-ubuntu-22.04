@@ -2,11 +2,12 @@ trigger:
 - main
 
 pool:
-  name: SelfHostedBackend
+  name: self-hosted-agent
 
 variables:
   APP_PATH: '/chatapp'
   SERVICE_NAME: 'chatappdaemon.service'
+  BACKEND_HOST: 'azureuser@40.0.0.5'
 
 stages:
 - stage: Deploy
@@ -17,42 +18,36 @@ stages:
     - checkout: self
       clean: true
 
-    - task: CopyFilesOverSSH@0
-      inputs:
-        sshEndpoint: 'backend_vm_ssh'
-        sourceFolder: '$(Build.SourcesDirectory)'
-        contents: '**'
-        targetFolder: '$(APP_PATH)'
-      displayName: 'Copy code to backend server'
+    - script: |
+        echo "Copying code to backend VM..."
+        scp -o StrictHostKeyChecking=no -r * $(BACKEND_HOST):$(APP_PATH)/
+      displayName: 'Copy code to backend VM'
 
-    - task: SSH@0
-      inputs:
-        sshEndpoint: 'backend_vm_ssh'
-        runOptions: 'inline'
-        inline: |
+    - script: |
+        echo "Installing Python dependencies..."
+        ssh -o StrictHostKeyChecking=no $(BACKEND_HOST) << EOF
           cd $(APP_PATH)
           source venv/bin/activate
           pip3 install -r requirements.txt
           deactivate
+        EOF
       displayName: 'Install Python dependencies'
 
-    - task: SSH@0
-      inputs:
-        sshEndpoint: 'backend_vm_ssh'
-        runOptions: 'inline'
-        inline: |
+    - script: |
+        echo "Applying Django migrations..."
+        ssh -o StrictHostKeyChecking=no $(BACKEND_HOST) << EOF
           cd $(APP_PATH)
           source venv/bin/activate
           cd fundoo
           python3 manage.py migrate
           cd ..
           deactivate
+        EOF
       displayName: 'Run Django migrations'
 
-    - task: SSH@0
-      inputs:
-        sshEndpoint: 'backend_vm_ssh'
-        runOptions: 'inline'
-        inline: |
+    - script: |
+        echo "Restarting service..."
+        ssh -o StrictHostKeyChecking=no $(BACKEND_HOST) << EOF
           sudo systemctl restart $(SERVICE_NAME)
-      displayName: 'Restart service'
+        EOF
+      displayName: 'Restart backend service'
