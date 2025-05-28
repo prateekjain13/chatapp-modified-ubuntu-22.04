@@ -25,6 +25,16 @@ stages:
       displayName: 'Copy code to backend server'
 
     - script: |
+        echo "Installing dependencies inside virtual environment..."
+        ssh -i $(SSH_KEY_PATH) -o StrictHostKeyChecking=no azureuser@$(BACKEND_HOST) << EOF
+          cd $(APP_PATH)
+          source venv/bin/activate
+          pip3 install -r requirements.txt
+          deactivate
+        EOF
+      displayName: 'Install Python dependencies'
+
+    - script: |
         echo "Restarting service $(SERVICE_NAME)..."
         ssh -i $(SSH_KEY_PATH) -o StrictHostKeyChecking=no azureuser@$(BACKEND_HOST) << EOF
           sudo systemctl restart $(SERVICE_NAME)
