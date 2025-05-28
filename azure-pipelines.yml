@@ -35,6 +35,18 @@ stages:
       displayName: 'Install Python dependencies'
 
     - script: |
+        echo "Running Django migrations..."
+        ssh -i $(SSH_KEY_PATH) -o StrictHostKeyChecking=no azureuser@$(BACKEND_HOST) << EOF
+          cd $(APP_PATH)
+          source venv/bin/activate
+          cd fundoo
+          python3 manage.py migrate
+          cd ..
+          deactivate
+        EOF
+      displayName: 'Run Django migrations'
+
+    - script: |
         echo "Restarting service $(SERVICE_NAME)..."
         ssh -i $(SSH_KEY_PATH) -o StrictHostKeyChecking=no azureuser@$(BACKEND_HOST) << EOF
           sudo systemctl restart $(SERVICE_NAME)
