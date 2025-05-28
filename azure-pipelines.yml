@@ -5,8 +5,6 @@ pool:
   name: SelfHostedBackend  # Use your self-hosted agent pool
 
 variables:
-  SSH_KEY_PATH: '/home/azureuser/.ssh/backend_key.pem'
-  BACKEND_HOST: '20.115.90.142'
   APP_PATH: '/chatapp'
   SERVICE_NAME: 'chatappdaemon.service'
 
@@ -19,36 +17,42 @@ stages:
     - checkout: self
       clean: true
 
-    - script: |
-        echo "Copying latest code to backend server..."
-        scp -i $(SSH_KEY_PATH) -o StrictHostKeyChecking=no -r * azureuser@$(BACKEND_HOST):$(APP_PATH)/
+    - task: CopyFilesOverSSH@0
+      inputs:
+        sshEndpoint: 'backend_vm_ssh'  # Name of your SSH service connection
+        sourceFolder: '$(Build.SourcesDirectory)'
+        contents: '**'
+        targetFolder: '$(APP_PATH)'
       displayName: 'Copy code to backend server'
 
-    - script: |
-        echo "Installing dependencies inside virtual environment..."
-        ssh -i $(SSH_KEY_PATH) -o StrictHostKeyChecking=no azureuser@$(BACKEND_HOST) << EOF
+    - task: SSH@0
+      inputs:
+        sshEndpoint: 'backend_vm_ssh'
+        runOptions: 'inline'
+        inline: |
           cd $(APP_PATH)
           source venv/bin/activate
           pip3 install -r requirements.txt
           deactivate
-        EOF
       displayName: 'Install Python dependencies'
 
-    - script: |
-        echo "Running Django migrations..."
-        ssh -i $(SSH_KEY_PATH) -o StrictHostKeyChecking=no azureuser@$(BACKEND_HOST) << EOF
+    - task: SSH@0
+      inputs:
+        sshEndpoint: 'backend_vm_ssh'
+        runOptions: 'inline'
+        inline: |
           cd $(APP_PATH)
           source venv/bin/activate
           cd fundoo
           python3 manage.py migrate
           cd ..
           deactivate
-        EOF
       displayName: 'Run Django migrations'
 
-    - script: |
-        echo "Restarting service $(SERVICE_NAME)..."
-        ssh -i $(SSH_KEY_PATH) -o StrictHostKeyChecking=no azureuser@$(BACKEND_HOST) << EOF
+    - task: SSH@0
+      inputs:
+        sshEndpoint: 'backend_vm_ssh'
+        runOptions: 'inline'
+        inline: |
           sudo systemctl restart $(SERVICE_NAME)
-        EOF
       displayName: 'Restart service'
