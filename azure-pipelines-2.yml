@@ -1,0 +1,46 @@
+trigger:
+- main
+
+pool:
+  name: self-hosted-agent
+
+variables:
+  APP_PATH: '/chatapp'
+  SERVICE_NAME: 'chatappdaemon.service'
+  BACKEND_HOST: 'azureuser@40.0.0.5'
+
+stages:
+- stage: Deploy
+  jobs:
+  - job: DeployJob
+    steps:
+
+    - checkout: self
+      clean: true
+
+    - script: |
+        echo "Copying code to backend VM..."
+        scp -r * $(BACKEND_HOST):$(APP_PATH)/
+      displayName: 'Copy code to backend VM'
+
+    - script: |
+        echo "Installing Python dependencies..."
+        ssh $(BACKEND_HOST) << EOF
+          cd $(APP_PATH)
+          source venv/bin/activate
+          pip3 install -r requirements.txt
+          deactivate
+        EOF
+      displayName: 'Install Python dependencies'
+
+    - script: |
+        echo "Applying Django migrations..."
+        ssh $(BACKEND_HOST) << EOF
+          cd $(APP_PATH)
+          source venv/bin/activate
+          cd fundoo
+          python3 manage.py migrate
+          cd ..
+          deactivate
+        EOF
+      displayName: 'Run Django migrations'
