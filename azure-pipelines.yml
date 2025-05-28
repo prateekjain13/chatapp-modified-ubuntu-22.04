@@ -20,12 +20,12 @@ stages:
 
     - script: |
         echo "Copying code to backend VM..."
-        scp -o StrictHostKeyChecking=no -r * $(BACKEND_HOST):$(APP_PATH)/
+        scp -r * $(BACKEND_HOST):$(APP_PATH)/
       displayName: 'Copy code to backend VM'
 
     - script: |
         echo "Installing Python dependencies..."
-        ssh -o StrictHostKeyChecking=no $(BACKEND_HOST) << EOF
+        ssh $(BACKEND_HOST) << EOF
           cd $(APP_PATH)
           source venv/bin/activate
           pip3 install -r requirements.txt
@@ -35,7 +35,7 @@ stages:
 
     - script: |
         echo "Applying Django migrations..."
-        ssh -o StrictHostKeyChecking=no $(BACKEND_HOST) << EOF
+        ssh $(BACKEND_HOST) << EOF
           cd $(APP_PATH)
           source venv/bin/activate
           cd fundoo
@@ -47,7 +47,7 @@ stages:
 
     - script: |
         echo "Restarting service..."
-        ssh -o StrictHostKeyChecking=no $(BACKEND_HOST) << EOF
+        ssh $(BACKEND_HOST) << EOF
           sudo systemctl restart $(SERVICE_NAME)
         EOF
       displayName: 'Restart backend service'
