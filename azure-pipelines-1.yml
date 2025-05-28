@@ -1,0 +1,32 @@
+trigger:
+- main
+
+pool:
+  name: SelfHostedBackend  # Use your self-hosted agent pool
+
+variables:
+  SSH_KEY_PATH: '/home/azureuser/.ssh/backend_key.pem'
+  BACKEND_HOST: '20.115.90.142'
+  APP_PATH: '/chatapp'
+  SERVICE_NAME: 'chatappdaemon.service'
+
+stages:
+- stage: Deploy
+  jobs:
+  - job: DeployJob
+    steps:
+
+    - checkout: self
+      clean: true
+
+    - script: |
+        echo "Copying latest code to backend server..."
+        scp -i $(SSH_KEY_PATH) -o StrictHostKeyChecking=no -r * azureuser@$(BACKEND_HOST):$(APP_PATH)/
+      displayName: 'Copy code to backend server'
+
+    - script: |
+        echo "Restarting service $(SERVICE_NAME)..."
+        ssh -i $(SSH_KEY_PATH) -o StrictHostKeyChecking=no azureuser@$(BACKEND_HOST) << EOF
+          sudo systemctl restart $(SERVICE_NAME)
+        EOF
+      displayName: 'Restart service'
