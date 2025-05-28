@@ -2,7 +2,7 @@ trigger:
 - main
 
 pool:
-  name: SelfHostedBackend  # Use your self-hosted agent pool
+  name: SelfHostedBackend
 
 variables:
   APP_PATH: '/chatapp'
@@ -19,7 +19,7 @@ stages:
 
     - task: CopyFilesOverSSH@0
       inputs:
-        sshEndpoint: 'backend_vm_ssh'  # Name of your SSH service connection
+        sshEndpoint: 'backend_vm_ssh'
         sourceFolder: '$(Build.SourcesDirectory)'
         contents: '**'
         targetFolder: '$(APP_PATH)'
