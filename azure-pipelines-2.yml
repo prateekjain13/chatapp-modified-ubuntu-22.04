@@ -6,41 +6,22 @@ pool:
 
 variables:
   APP_PATH: '/chatapp'
-  SERVICE_NAME: 'chatappdaemon.service'
-  BACKEND_HOST: 'azureuser@40.0.0.5'
+  ARTIFACT_NAME: 'chatapp-package'
 
 stages:
-- stage: Deploy
+- stage: PackageAndPublish
   jobs:
-  - job: DeployJob
+  - job: PackageJob
     steps:
 
     - checkout: self
       clean: true
 
     - script: |
-        echo "Copying code to backend VM..."
-        scp -r * $(BACKEND_HOST):$(APP_PATH)/
-      displayName: 'Copy code to backend VM'
+        echo "Zipping code..."
+        zip -r $(ARTIFACT_NAME).zip ./*
+      displayName: 'Package code as ZIP'
 
-    - script: |
-        echo "Installing Python dependencies..."
-        ssh $(BACKEND_HOST) << EOF
-          cd $(APP_PATH)
-          source venv/bin/activate
-          pip3 install -r requirements.txt
-          deactivate
-        EOF
-      displayName: 'Install Python dependencies'
-
-    - script: |
-        echo "Applying Django migrations..."
-        ssh $(BACKEND_HOST) << EOF
-          cd $(APP_PATH)
-          source venv/bin/activate
-          cd fundoo
-          python3 manage.py migrate
-          cd ..
-          deactivate
-        EOF
-      displayName: 'Run Django migrations'
+    - publish: $(ARTIFACT_NAME).zip
+      artifact: $(ARTIFACT_NAME)
+      displayName: 'Publish artifact'
