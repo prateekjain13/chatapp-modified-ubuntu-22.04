@@ -18,6 +18,12 @@ stages:
       clean: true
 
     - script: |
+        echo "Installing zip utility..."
+        sudo apt-get update
+        sudo apt-get install -y zip
+      displayName: 'Install zip'
+
+    - script: |
         echo "Zipping code..."
         zip -r $(ARTIFACT_NAME).zip ./*
       displayName: 'Package code as ZIP'
